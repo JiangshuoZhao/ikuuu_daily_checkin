@@ -1,5 +1,4 @@
 name: "Airport Checkin"
-
 on:
   schedule:
     - cron: "0 22 * * *"  # scheduled at 06:00 (UTC+8) everyday
@@ -19,7 +18,6 @@ jobs:
         with:
           fetch-depth: 0
           # ref: master
-
       - name: Set up python
         uses: actions/setup-python@v2
         with:
