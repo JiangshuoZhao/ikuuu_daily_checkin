@@ -10,12 +10,12 @@ SCKEY = os.environ.get('SCKEY')
 
 ## 域名经常出问题
 domain_name = 'https://ikuuu.pw/'
-login_url = domain_name + 'login'
-check_url = domain_name + 'checkin'
+login_url = domain_name + 'auth/login'
+check_url = domain_name + 'user/checkin'
 info_url = domain_name + 'user/profile'
 
 header = {
-        'origin': 'https://ikuuu.me',
+        'origin': domain_name,
         'user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36'
 }
 data = {
