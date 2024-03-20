@@ -9,7 +9,7 @@ passwd = os.environ.get('PASSWD')
 SCKEY = os.environ.get('SCKEY')
 
 ## 域名经常出问题
-domain_name = 'https://ikuuu.org/'
+domain_name = 'https://ikuuu.pw/'
 login_url = domain_name + 'login'
 check_url = domain_name + 'checkin'
 info_url = domain_name + 'user/profile'
@@ -25,6 +25,7 @@ data = {
 try:
     print('进行登录...')
     response = json.loads(session.post(url=login_url,headers=header,data=data).text)
+    print("----登录成功-----")
     print(response['msg'])
     # 获取账号名称
     info_html = session.get(url=info_url,headers=header).text
