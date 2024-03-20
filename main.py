@@ -25,7 +25,7 @@ data = {
 try:
     print('进行登录...')
     response = json.loads(session.post(url=login_url,headers=header,data=data).text)
-    print("----登录成功-----")
+    print("----域名正常-----")
     print(response['msg'])
     # 获取账号名称
     info_html = session.get(url=info_url,headers=header).text
