@@ -8,9 +8,11 @@ passwd = os.environ.get('PASSWD')
 # server酱
 SCKEY = os.environ.get('SCKEY')
 
-login_url = 'https://ikuuu.me/auth/login'
-check_url = 'https://ikuuu.me/user/checkin'
-info_url = 'https://ikuuu.me/user/profile'
+## 域名经常出问题
+domain_name = 'https://ikuuu.org/'
+login_url = domain_name + 'login'
+check_url = domain_name + 'checkin'
+info_url = domain_name + 'user/profile'
 
 header = {
         'origin': 'https://ikuuu.me',
