@@ -14,14 +14,14 @@ jobs:
 
     steps:
       - name: Checkout master
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           # ref: master
       - name: Set up python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.7
+          python-version: '3.12'
 
       - name: Random sleep
         if: github.event_name == 'schedule'
@@ -36,5 +36,6 @@ jobs:
           SCKEY: ${{ secrets.SCKEY }}
           EMAIL: ${{ secrets.EMAIL }}
           PASSWD: ${{ secrets.PASSWD }}
+          IKUUU_COOKIE: ${{ secrets.IKUUU_COOKIE }}
         run: |
           python3 ./main.py
