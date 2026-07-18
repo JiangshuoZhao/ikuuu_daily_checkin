@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import re
+import threading
 from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass
 from typing import Protocol, cast
@@ -418,7 +419,19 @@ def send_telegram_code_sync(
     credentials: TelegramCredentials,
     number: str,
 ) -> None:
-    asyncio.run(send_telegram_code(credentials, number))
+    error: list[BaseException] = []
+
+    def run_in_thread() -> None:
+        try:
+            asyncio.run(send_telegram_code(credentials, number))
+        except BaseException as exc:
+            error.append(exc)
+
+    thread = threading.Thread(target=run_in_thread, daemon=True)
+    thread.start()
+    thread.join()
+    if error:
+        raise error[0]
 
 
 def login_and_checkin_with_telegram(

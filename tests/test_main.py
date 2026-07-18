@@ -183,6 +183,23 @@ async def test_revoked_telegram_session_is_reported() -> None:
     assert client.disconnected
 
 
+@pytest.mark.asyncio
+async def test_sync_telegram_sender_works_inside_running_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent: list[tuple[main.TelegramCredentials, str]] = []
+
+    async def fake_send(credentials: main.TelegramCredentials, number: str) -> None:
+        sent.append((credentials, number))
+
+    monkeypatch.setattr(main, "send_telegram_code", fake_send)
+    credentials = telegram_credentials()
+
+    main.send_telegram_code_sync(credentials, "123456")
+
+    assert sent == [(credentials, "123456")]
+
+
 def test_login_page_protocol_change_is_reported() -> None:
     browser = FakeBrowser(
         error=main.ProtocolError("iKuuu 登录页格式已变化，未找到 Telegram 登录入口")
