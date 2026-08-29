@@ -5,3 +5,6 @@ __pycache__/
 *.py[cod]
 *.session
 *.session-journal
+
+# 本地密钥文件，勿提交
+secrets/
