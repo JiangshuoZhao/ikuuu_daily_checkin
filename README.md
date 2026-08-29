@@ -11,8 +11,6 @@
 
 - Telegram 登录最多尝试 2 次。
 - 每次最多等待 60 秒，浏览器沿用网站自身的 2.5 秒登录状态轮询。
-- 配置 Telegram 后始终优先使用 Telegram，不会读取旧的 `IKUUU_COOKIE`。
-- 未配置 Telegram 时，可以继续使用 `IKUUU_COOKIE` 兼容路径。
 - `SCKEY` 可选；配置后签到成功或失败都会发送 Server酱通知。
 
 ## 获取 Telegram API 凭据
@@ -67,10 +65,9 @@ Fork 仓库后，进入：
 | `TELEGRAM_SESSION` | 是 | 本地初始化脚本生成的完整 StringSession |
 | `SCKEY` | 否 | Server酱 SendKey，用于成功和失败通知 |
 | `DOMAIN_NAME` | 否 | iKuuu 站点地址，默认 `https://ikuuu.org/` |
-| `IKUUU_COOKIE` | 否 | 未配置 Telegram 时使用的兼容登录凭据 |
 
-三个 Telegram Secret 必须同时配置。只配置其中一部分时，任务会明确报出缺失的
-Secret，不会回退到 Cookie。
+三个 Telegram Secret 必须同时配置，只配置其中一部分时任务会明确报出缺失的
+Secret。未配置 Telegram 时任务会直接失败，不再提供其他登录方式。
 
 配置完成后，进入仓库的 `Actions` 页面，选择 `Airport Checkin`，点击
 `Run workflow` 手动验证。之后工作流会按计划每天执行。
@@ -90,10 +87,5 @@ Secret，不会回退到 Cookie。
 覆盖 GitHub 中的 `TELEGRAM_SESSION`。
 
 如果怀疑 Session 泄露，应先在 Telegram 的
-`Settings` → `Devices` 中终止相关会话，再重新生成。不要将 Session、API Hash、
-Cookie 或 Server酱 SendKey 发到公开位置。
-
-## Cookie 兼容路径
-
-只有在三个 Telegram Secret 都未配置时，程序才会使用 `IKUUU_COOKIE`。Cookie
-通常会在数天后失效，因此只建议临时使用；Telegram 自动登录是长期运行的推荐方案。
+`Settings` → `Devices` 中终止相关会话，再重新生成。不要将 Session、API Hash
+或 Server酱 SendKey 发到公开位置。

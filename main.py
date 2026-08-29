@@ -22,8 +22,6 @@ POLL_TIMEOUT_SECONDS = 60
 TELEGRAM_LOGIN_ATTEMPTS = 2
 PLAYWRIGHT_DEFAULT_TIMEOUT_MS = 20_000
 
-JsonObject = dict[str, object]
-
 
 class HttpResponse(Protocol):
     status_code: int
@@ -135,77 +133,16 @@ class TelegramCredentials:
 class Config:
     domain: str
     telegram: TelegramCredentials | None
-    cookie: str | None
     sckey: str | None
 
     @classmethod
     def from_environment(cls) -> "Config":
         domain = (os.environ.get("DOMAIN_NAME") or DEFAULT_DOMAIN).rstrip("/") + "/"
-        cookie = (
-            os.environ.get("IKUUU_COOKIE") or os.environ.get("COOKIE") or ""
-        ).strip()
         return cls(
             domain=domain,
             telegram=TelegramCredentials.from_environment(),
-            cookie=cookie or None,
             sckey=(os.environ.get("SCKEY") or "").strip() or None,
         )
-
-
-class IkuuuClient:
-    def __init__(
-        self,
-        domain: str,
-        session: HttpSession | None = None,
-        request_timeout: int = REQUEST_TIMEOUT_SECONDS,
-    ) -> None:
-        self.domain = domain.rstrip("/") + "/"
-        self.session = session or requests.Session()
-        self.request_timeout = request_timeout
-        self.checkin_url = self.domain + "user/checkin"
-        self.session.headers.update(
-            {
-                "origin": self.domain.rstrip("/"),
-                "referer": self.domain + "auth/login",
-                "user-agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/126.0.0.0 Safari/537.36"
-                ),
-            }
-        )
-
-    def _request(self, method: str, url: str, **kwargs: object) -> HttpResponse:
-        try:
-            request = getattr(self.session, method)
-            response = request(url, timeout=self.request_timeout, **kwargs)
-            response.raise_for_status()
-            return response
-        except requests.RequestException as exc:
-            raise NetworkError(f"iKuuu 网络请求失败（{type(exc).__name__}）") from exc
-
-    def _request_json(self, method: str, url: str, **kwargs: object) -> JsonObject:
-        response = self._request(method, url, **kwargs)
-        try:
-            payload = response.json()
-        except (json.JSONDecodeError, ValueError) as exc:
-            content_type = response.headers.get("content-type", "unknown").split(";")[0]
-            raise ProtocolError(
-                f"iKuuu 返回了非 JSON 响应（HTTP {response.status_code}, {content_type}）"
-            ) from exc
-        if not isinstance(payload, dict):
-            raise ProtocolError("iKuuu 返回的 JSON 结构不符合预期")
-        return cast(JsonObject, payload)
-
-    def use_cookie(self, cookie: str) -> None:
-        self.session.headers["cookie"] = cookie
-
-    def check_in(self) -> str:
-        payload = self._request_json("post", self.checkin_url)
-        message = payload.get("msg")
-        if not isinstance(message, str) or not message.strip():
-            raise ProtocolError("签到响应缺少有效消息")
-        return message.strip()
 
 
 class PlaywrightIkuuuClient:
@@ -463,32 +400,21 @@ def login_and_checkin_with_telegram(
 
 def run_checkin(
     config: Config,
-    client: IkuuuClient | None = None,
     telegram_sender: TelegramSender = send_telegram_code_sync,
     browser_factory: BrowserLoginClientFactory = PlaywrightIkuuuClient,
 ) -> str:
-    if config.telegram is not None:
-        print("使用浏览器和 Telegram 获取新的登录会话...")
-        return login_and_checkin_with_telegram(
-            config.domain,
-            config.telegram,
-            telegram_sender=telegram_sender,
-            browser_factory=browser_factory,
-        )
-
-    ikuuu = client or IkuuuClient(config.domain)
-    if config.cookie:
-        print("未配置 Telegram，使用 IKUUU_COOKIE 兼容路径...")
-        ikuuu.use_cookie(config.cookie)
-    else:
+    if config.telegram is None:
         raise ConfigurationError(
-            "请配置 TELEGRAM_API_ID、TELEGRAM_API_HASH、TELEGRAM_SESSION，"
-            "或提供备用 IKUUU_COOKIE"
+            "请配置 TELEGRAM_API_ID、TELEGRAM_API_HASH、TELEGRAM_SESSION"
         )
 
-    result = ikuuu.check_in()
-    print(result)
-    return result
+    print("使用浏览器和 Telegram 获取新的登录会话...")
+    return login_and_checkin_with_telegram(
+        config.domain,
+        config.telegram,
+        telegram_sender=telegram_sender,
+        browser_factory=browser_factory,
+    )
 
 
 def main() -> int:

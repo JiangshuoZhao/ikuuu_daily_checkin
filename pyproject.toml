@@ -1,0 +1,3 @@
+[tool.ruff.lint.per-file-ignores]
+# 资源清理和兜底错误处理刻意吞掉异常
+"main.py" = ["S110", "BLE001"]

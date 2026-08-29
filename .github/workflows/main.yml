@@ -42,5 +42,4 @@ jobs:
           TELEGRAM_SESSION: ${{ secrets.TELEGRAM_SESSION }}
           SCKEY: ${{ secrets.SCKEY }}
           DOMAIN_NAME: ${{ secrets.DOMAIN_NAME }}
-          IKUUU_COOKIE: ${{ secrets.IKUUU_COOKIE }}
         run: python ./main.py
