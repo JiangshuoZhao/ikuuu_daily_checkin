@@ -38,18 +38,19 @@ class FakeSession:
 class FakeBrowser:
     def __init__(
         self,
+        number: str = "123456",
         result: str = "签到成功",
         error: main.CheckinError | None = None,
     ) -> None:
+        self.number = number
         self.result = result
         self.error = error
-        self.opened = False
         self.closed = False
 
-    def open_login_page(self) -> None:
+    def get_telegram_code(self) -> str:
         if isinstance(self.error, main.ProtocolError):
             raise self.error
-        self.opened = True
+        return self.number
 
     def wait_for_login(self) -> None:
         if self.error is not None and not isinstance(self.error, main.ProtocolError):
@@ -70,28 +71,8 @@ class FakePage:
         return self.evaluate_result
 
 
-def telegram_credentials(
-    code: str = main.DEFAULT_TELEGRAM_CODE,
-) -> main.TelegramCredentials:
-    return main.TelegramCredentials(12345, "api-hash", "string-session", code)
-
-
-def test_default_code_is_used_without_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("TELEGRAM_CODE", raising=False)
-    monkeypatch.setenv("TELEGRAM_API_ID", "12345")
-    monkeypatch.setenv("TELEGRAM_API_HASH", "api-hash")
-    monkeypatch.setenv("TELEGRAM_SESSION", "string-session")
-
-    assert main.TelegramCredentials.from_environment() == telegram_credentials()
-
-
-def test_code_env_overrides_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("TELEGRAM_CODE", "000000")
-    monkeypatch.setenv("TELEGRAM_API_ID", "12345")
-    monkeypatch.setenv("TELEGRAM_API_HASH", "api-hash")
-    monkeypatch.setenv("TELEGRAM_SESSION", "string-session")
-
-    assert main.TelegramCredentials.from_environment().code == "000000"
+def telegram_credentials() -> main.TelegramCredentials:
+    return main.TelegramCredentials(12345, "api-hash", "string-session")
 
 
 def test_partial_telegram_config_is_rejected(
@@ -105,20 +86,26 @@ def test_partial_telegram_config_is_rejected(
         main.TelegramCredentials.from_environment()
 
 
+def test_config_reads_domain_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DOMAIN_NAME", raising=False)
+    monkeypatch.delenv("SCKEY", raising=False)
+
+    assert main.Config.from_environment().domain == main.DEFAULT_DOMAIN
+
+
 def test_telegram_login_and_checkin_success() -> None:
-    browser = FakeBrowser()
+    browser = FakeBrowser(number="654321")
     sent_codes: list[str] = []
     config = main.Config("https://example.test/", telegram_credentials(), None)
 
     result = main.run_checkin(
         config,
-        telegram_sender=lambda credentials: sent_codes.append(credentials.code),
+        telegram_sender=lambda _credentials, code: sent_codes.append(code),
         browser_factory=lambda _domain: browser,
     )
 
     assert result == "签到成功"
-    assert sent_codes == [main.DEFAULT_TELEGRAM_CODE]
-    assert browser.opened
+    assert sent_codes == ["654321"]
     assert browser.closed
 
 
@@ -136,7 +123,7 @@ def test_already_checked_in_is_a_valid_result() -> None:
     assert (
         main.run_checkin(
             config,
-            telegram_sender=lambda _credentials: None,
+            telegram_sender=lambda _credentials, _code: None,
             browser_factory=lambda _domain: browser,
         )
         == "今天已经签到过了"
@@ -144,11 +131,11 @@ def test_already_checked_in_is_a_valid_result() -> None:
     assert browser.closed
 
 
-def test_timeout_retries_send_code_twice() -> None:
+def test_timeout_retries_request_a_new_code() -> None:
     browsers = deque(
         [
-            FakeBrowser(error=main.LoginTimeoutError("等待超时")),
-            FakeBrowser(error=main.LoginTimeoutError("等待超时")),
+            FakeBrowser("111111", error=main.LoginTimeoutError("等待超时")),
+            FakeBrowser("222222", error=main.LoginTimeoutError("等待超时")),
         ]
     )
     sent_codes: list[str] = []
@@ -156,12 +143,12 @@ def test_timeout_retries_send_code_twice() -> None:
     with pytest.raises(main.LoginTimeoutError, match="等待超时"):
         main.login_and_checkin_with_telegram(
             "https://example.test/",
-            telegram_credentials("123456"),
-            telegram_sender=lambda credentials: sent_codes.append(credentials.code),
+            telegram_credentials(),
+            telegram_sender=lambda _credentials, code: sent_codes.append(code),
             browser_factory=lambda _domain: browsers.popleft(),
         )
 
-    assert sent_codes == ["123456", "123456"]
+    assert sent_codes == ["111111", "222222"]
     assert not browsers
 
 
@@ -185,11 +172,12 @@ async def test_revoked_telegram_session_is_reported() -> None:
     client = UnauthorizedClient()
 
     # 空字符串可被 StringSession 解析；占位字符串会导致会话对象未创建
-    credentials = main.TelegramCredentials(12345, "api-hash", "", "123456")
+    credentials = main.TelegramCredentials(12345, "api-hash", "")
 
     with pytest.raises(main.TelegramSessionError, match="重新生成"):
         await main.send_telegram_code(
             credentials,
+            "123456",
             client_factory=lambda *_args: client,
         )
 
@@ -200,28 +188,33 @@ async def test_revoked_telegram_session_is_reported() -> None:
 async def test_sync_telegram_sender_works_inside_running_loop(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    sent: list[str] = []
+    sent: list[tuple[str, str]] = []
 
     async def fake_send(
         credentials: main.TelegramCredentials,
+        code: str,
         client_factory: object | None = None,
     ) -> None:
-        sent.append(credentials.code)
+        sent.append((credentials.session, code))
 
     monkeypatch.setattr(main, "send_telegram_code", fake_send)
-    main.send_telegram_code_sync(telegram_credentials("4321"))
+    credentials = main.TelegramCredentials(12345, "api-hash", "sess")
 
-    assert sent == ["4321"]
+    main.send_telegram_code_sync(credentials, "4321")
+
+    assert sent == [("sess", "4321")]
 
 
-def test_login_timeout_is_reported() -> None:
-    browser = FakeBrowser(error=main.LoginTimeoutError("等待登录确认超时"))
+def test_login_page_protocol_change_is_reported() -> None:
+    browser = FakeBrowser(
+        error=main.ProtocolError("iKuuu 登录页格式已变化，未找到 Telegram 登录入口")
+    )
 
-    with pytest.raises(main.LoginTimeoutError, match="等待登录确认超时"):
+    with pytest.raises(main.ProtocolError, match="登录页格式已变化"):
         main.login_and_checkin_with_telegram(
             "https://example.test/",
             telegram_credentials(),
-            telegram_sender=lambda _credentials: None,
+            telegram_sender=lambda _credentials, _code: None,
             browser_factory=lambda _domain: browser,
         )
 
@@ -312,7 +305,7 @@ def test_main_sends_failure_notification(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("SCKEY", "server-key")
 
     def fail_checkin(_config: main.Config) -> str:
-        raise main.LoginTimeoutError("等待登录确认超时")
+        raise main.ProtocolError("登录页格式已变化")
 
     monkeypatch.setattr(main, "run_checkin", fail_checkin)
     monkeypatch.setattr(
@@ -322,7 +315,7 @@ def test_main_sends_failure_notification(monkeypatch: pytest.MonkeyPatch) -> Non
     )
 
     assert main.main() == 1
-    assert sent == ["签到失败：等待登录确认超时"]
+    assert sent == ["签到失败：登录页格式已变化"]
 
 
 def test_main_missing_config_fails_cleanly(monkeypatch: pytest.MonkeyPatch) -> None:

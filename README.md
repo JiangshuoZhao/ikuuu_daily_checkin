@@ -6,16 +6,16 @@
 
 脚本在无人值守的无头 Chromium 里完成全部动作：
 
-1. 打开 iKuuu 登录页，页面自身会每 2.5 秒轮询一次登录状态；
-2. 脚本用 `TELEGRAM_SESSION` 直接把固定验证码发送给 `@iKuuuu_VPN_bot`；
-3. iKuuu 检测到已绑定的 Telegram 账号发送了验证码，自动建立登录会话；
-4. 脚本在同一浏览器会话中执行签到。
+1. 打开 iKuuu 登录页并点开 Telegram 登录弹窗；
+2. 读取弹窗中本次的六位登录码（每次都会变化）；
+3. 用 `TELEGRAM_SESSION` 把这串登录码发送给 `@iKuuuu_VPN_bot`；
+4. 登录页每 2.5 秒轮询一次，检测到已绑定的 Telegram 账号发送了登录码后
+   自动建立会话；
+5. 脚本在同一浏览器会话中执行签到。
 
-- 固定验证码写在代码里（`DEFAULT_TELEGRAM_CODE = "527740"`），
-  也可用 `TELEGRAM_CODE` 环境变量覆盖。
 - 登录失败时最多重试 2 次；每次最多等待 60 秒确认登录。
 - `SCKEY` 可选；配置后签到成功或失败都会发送 Server酱通知。
-- 脚本不会点击页面上的 Telegram 登录按钮，也不会读取页面上的登录码。
+- 访问登录页超时与登录页格式变化分别报不同的错误，便于区分偶发故障和站点改版。
 
 ## 获取 Telegram API 凭据
 
@@ -67,7 +67,6 @@ TELEGRAM_API_ID=123456 TELEGRAM_API_HASH='your-api-hash' \
 | `TELEGRAM_API_ID` | 是 | `my.telegram.org/apps` 显示的数字 API ID |
 | `TELEGRAM_API_HASH` | 是 | `my.telegram.org/apps` 显示的 API Hash |
 | `TELEGRAM_SESSION` | 是 | 本地初始化脚本生成的完整 StringSession |
-| `TELEGRAM_CODE` | 否 | 覆盖代码中的固定验证码，默认 `527740` |
 | `SCKEY` | 否 | Server酱 SendKey，用于成功和失败通知 |
 | `DOMAIN_NAME` | 否 | iKuuu 站点地址，默认 `https://ikuuu.org/` |
 

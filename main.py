@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 import threading
 from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
@@ -15,9 +16,6 @@ from telethon.errors import AuthKeyError, RPCError, UnauthorizedError
 from telethon.sessions import StringSession
 
 DEFAULT_DOMAIN = "https://ikuuu.org/"
-# iKuuu 固定验证码，由脚本发送给 TELEGRAM_BOT 确认登录。
-# 账号或验证码变更时修改这里，或用 TELEGRAM_CODE 环境变量覆盖。
-DEFAULT_TELEGRAM_CODE = "527740"
 TELEGRAM_BOT = "@iKuuuu_VPN_bot"
 REQUEST_TIMEOUT_SECONDS = 20
 LOGIN_TIMEOUT_SECONDS = 60
@@ -56,7 +54,7 @@ TelegramClientFactory = object
 
 
 class LoginClient(Protocol):
-    def open_login_page(self) -> None: ...
+    def get_telegram_code(self) -> str: ...
 
     def wait_for_login(self) -> None: ...
 
@@ -98,7 +96,6 @@ class TelegramCredentials:
     api_id: int
     api_hash: str
     session: str
-    code: str
 
     @classmethod
     def from_environment(cls) -> "TelegramCredentials | None":
@@ -121,12 +118,10 @@ class TelegramCredentials:
         if api_id <= 0:
             raise ConfigurationError("TELEGRAM_API_ID 必须是正整数")
 
-        code = (os.environ.get("TELEGRAM_CODE") or "").strip() or DEFAULT_TELEGRAM_CODE
         return cls(
             api_id=api_id,
             api_hash=values["TELEGRAM_API_HASH"],
             session=values["TELEGRAM_SESSION"],
-            code=code,
         )
 
 
@@ -211,7 +206,7 @@ class PlaywrightIkuuuClient:
             raise NetworkError(f"浏览器启动失败（{type(exc).__name__}）") from exc
         return self._page
 
-    def open_login_page(self) -> None:
+    def get_telegram_code(self) -> str:
         try:
             page = self._ensure_page()
             page.goto(
@@ -220,11 +215,32 @@ class PlaywrightIkuuuClient:
                 timeout=self.default_timeout_ms,
             )
         except PlaywrightTimeoutError as exc:
-            raise NetworkError("打开 iKuuu 登录页超时") from exc
+            raise NetworkError("访问 iKuuu 登录页超时") from exc
         except PlaywrightError as exc:
             raise NetworkError(
                 f"浏览器访问 iKuuu 失败（{type(exc).__name__}）"
             ) from exc
+
+        try:
+            button = page.locator("#telegram-login-button")
+            button.wait_for(state="visible", timeout=self.default_timeout_ms)
+            button.click()
+            number = page.locator("#code_number").inner_text(
+                timeout=self.default_timeout_ms
+            )
+        except PlaywrightTimeoutError as exc:
+            raise ProtocolError(
+                "iKuuu 登录页格式已变化，未找到 Telegram 登录入口"
+            ) from exc
+        except PlaywrightError as exc:
+            raise NetworkError(
+                f"浏览器访问 iKuuu 失败（{type(exc).__name__}）"
+            ) from exc
+
+        number = number.strip()
+        if not re.fullmatch(r"\d{6}", number):
+            raise ProtocolError("iKuuu 登录页格式已变化，未找到六位 Telegram 登录码")
+        return number
 
     def wait_for_login(self) -> None:
         try:
@@ -303,6 +319,7 @@ class PlaywrightIkuuuClient:
 
 async def send_telegram_code(
     credentials: TelegramCredentials,
+    code: str,
     client_factory: TelegramClientFactory | None = None,
 ) -> None:
     client: AsyncTelegramClient | None = None
@@ -318,7 +335,7 @@ async def send_telegram_code(
             raise TelegramSessionError(
                 "Telegram Session 已失效，请在本地重新生成 TELEGRAM_SESSION"
             )
-        _ = await client.send_message(TELEGRAM_BOT, credentials.code)
+        _ = await client.send_message(TELEGRAM_BOT, code)
     except TelegramSessionError:
         raise
     except (UnauthorizedError, AuthKeyError, ValueError) as exc:
@@ -341,13 +358,16 @@ async def send_telegram_code(
 
 def send_telegram_code_sync(
     credentials: TelegramCredentials,
+    code: str,
     client_factory: TelegramClientFactory | None = None,
 ) -> None:
     error: list[BaseException] = []
 
     def run_in_thread() -> None:
         try:
-            asyncio.run(send_telegram_code(credentials, client_factory=client_factory))
+            asyncio.run(
+                send_telegram_code(credentials, code, client_factory=client_factory)
+            )
         except BaseException as exc:
             error.append(exc)
 
@@ -368,9 +388,9 @@ def login_and_checkin_with_telegram(
     for attempt in range(1, LOGIN_ATTEMPTS + 1):
         browser = browser_factory(domain)
         try:
-            browser.open_login_page()
-            print(f"发送固定验证码 {credentials.code} 到 {TELEGRAM_BOT}")
-            telegram_sender(credentials)
+            number = browser.get_telegram_code()
+            print(f"发送登录码 {number} 到 {TELEGRAM_BOT}")
+            telegram_sender(credentials, number)
             browser.wait_for_login()
             result = browser.check_in()
             print(result)
