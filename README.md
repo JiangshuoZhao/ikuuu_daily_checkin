@@ -1,17 +1,21 @@
 # iKuuu 每日签到
 
-通过 GitHub Actions 每天自动登录 iKuuu 并签到。推荐使用已绑定的 Telegram
-账号获取新的网页登录会话，避免固定 Cookie 过期导致任务失败。
+通过 GitHub Actions 每天自动登录 iKuuu 并签到，全程无需人工操作。
 
 ## 工作方式
 
-每次运行会在无头 Chromium 中打开 iKuuu 登录页，点击 Telegram 登录并读取六位
-登录码，再通过你的 Telegram 账号发送给 `@iKuuuu_VPN_bot`。登录页会每 2.5 秒
-检查一次状态，确认后在同一浏览器会话中执行签到。
+脚本在无人值守的无头 Chromium 里完成全部动作：
 
-- Telegram 登录最多尝试 2 次。
-- 每次最多等待 60 秒，浏览器沿用网站自身的 2.5 秒登录状态轮询。
+1. 打开 iKuuu 登录页，页面自身会每 2.5 秒轮询一次登录状态；
+2. 脚本用 `TELEGRAM_SESSION` 直接把固定验证码发送给 `@iKuuuu_VPN_bot`；
+3. iKuuu 检测到已绑定的 Telegram 账号发送了验证码，自动建立登录会话；
+4. 脚本在同一浏览器会话中执行签到。
+
+- 固定验证码写在代码里（`DEFAULT_TELEGRAM_CODE = "527740"`），
+  也可用 `TELEGRAM_CODE` 环境变量覆盖。
+- 登录失败时最多重试 2 次；每次最多等待 60 秒确认登录。
 - `SCKEY` 可选；配置后签到成功或失败都会发送 Server酱通知。
+- 脚本不会点击页面上的 Telegram 登录按钮，也不会读取页面上的登录码。
 
 ## 获取 Telegram API 凭据
 
@@ -51,7 +55,7 @@ TELEGRAM_API_ID=123456 TELEGRAM_API_HASH='your-api-hash' \
 
 ## 配置 GitHub Actions
 
-Fork 仓库后，进入：
+进入：
 
 `Settings` → `Secrets and variables` → `Actions` →
 `New repository secret`
@@ -63,6 +67,7 @@ Fork 仓库后，进入：
 | `TELEGRAM_API_ID` | 是 | `my.telegram.org/apps` 显示的数字 API ID |
 | `TELEGRAM_API_HASH` | 是 | `my.telegram.org/apps` 显示的 API Hash |
 | `TELEGRAM_SESSION` | 是 | 本地初始化脚本生成的完整 StringSession |
+| `TELEGRAM_CODE` | 否 | 覆盖代码中的固定验证码，默认 `527740` |
 | `SCKEY` | 否 | Server酱 SendKey，用于成功和失败通知 |
 | `DOMAIN_NAME` | 否 | iKuuu 站点地址，默认 `https://ikuuu.org/` |
 
@@ -89,3 +94,15 @@ Secret。未配置 Telegram 时任务会直接失败，不再提供其他登录�
 如果怀疑 Session 泄露，应先在 Telegram 的
 `Settings` → `Devices` 中终止相关会话，再重新生成。不要将 Session、API Hash
 或 Server酱 SendKey 发到公开位置。
+
+## 本地运行
+
+```bash
+python -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+python -m playwright install chromium
+
+TELEGRAM_API_ID=123456 TELEGRAM_API_HASH='your-api-hash' \
+TELEGRAM_SESSION='your-string-session' python main.py
+```
